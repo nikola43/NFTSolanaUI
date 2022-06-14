@@ -1,4 +1,5 @@
 import * as anchor from '@project-serum/anchor';
+import { getAssociatedTokenAddress } from '@solana/spl-token' // IGNORE THESE ERRORS IF ANY
 
 import { MintLayout, TOKEN_PROGRAM_ID, Token } from '@solana/spl-token';
 import {
@@ -274,16 +275,6 @@ export const createAccountsForMint = async (
         ).txs[0].txid,
     };
 };
-export const getCandyMachineCreator = async (
-    candyMachine: anchor.web3.PublicKey,
-): Promise<[anchor.web3.PublicKey, number]> => {
-    return await anchor.web3.PublicKey.findProgramAddress(
-        [Buffer.from('candy_machine'), candyMachine.toBuffer()],
-        CANDY_MACHINE_PROGRAM,
-    );
-};
-
-
 
 export const mintOneToken = async (
     candyMachine: CandyMachineAccount,
@@ -302,73 +293,36 @@ export const mintOneToken = async (
 
     const instructions = [];
     const signers: anchor.web3.Keypair[] = [];
-    console.log('SetupState: ', setupState);
-    if (!setupState) {
-        signers.push(mint);
-        instructions.push(
-            ...[
-                anchor.web3.SystemProgram.createAccount({
-                    fromPubkey: payer,
-                    newAccountPubkey: mint.publicKey,
-                    space: MintLayout.span,
-                    lamports:
-                        await candyMachine.program.provider.connection.getMinimumBalanceForRentExemption(
-                            MintLayout.span,
-                        ),
-                    programId: TOKEN_PROGRAM_ID,
-                }),
-                Token.createInitMintInstruction(
-                    TOKEN_PROGRAM_ID,
-                    mint.publicKey,
-                    0,
-                    payer,
-                    payer,
-                ),
-                createAssociatedTokenAccountInstruction(
-                    userTokenAccountAddress,
-                    payer,
-                    payer,
-                    mint.publicKey,
-                ),
-                Token.createMintToInstruction(
-                    TOKEN_PROGRAM_ID,
-                    mint.publicKey,
-                    userTokenAccountAddress,
-                    payer,
-                    [],
-                    1,
-                ),
-            ],
-        );
-    }
 
 
     const metadataAddress = await getMetadata(mint.publicKey);
     const masterEdition = await getMasterEdition(mint.publicKey);
 
-    const [candyMachineCreator, creatorBump] = await getCandyMachineCreator(
-        candyMachineAddress,
+
+    const NftTokenAccount = await getAssociatedTokenAddress(
+        mint.publicKey,
+        payer
     );
+    const nftData: any = {
+        mintPublicKey: mint.publicKey,
+        url: "https://s3.eu-central-1.wasabisys.com/somefiles/0.json",
+        name: "John NFT"
+    }
 
 
     instructions.push(
-        await candyMachine.program.instruction.mintNft(creatorBump, {
+        await candyMachine.program.instruction.mintNft(nftData, {
             accounts: {
-                candyMachine: candyMachineAddress,
-                candyMachineCreator,
-                payer: payer,
-                mint: mint.publicKey,
-                metadata: metadataAddress,
-                masterEdition,
                 mintAuthority: payer,
-                updateAuthority: payer,
-                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+                mint: mint.publicKey,
+                tokenAccount: NftTokenAccount,
                 tokenProgram: TOKEN_PROGRAM_ID,
+                metadata: metadataAddress,
+                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+                payer: payer,
                 systemProgram: SystemProgram.programId,
                 rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-                clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-                recentBlockhashes: SYSVAR_SLOT_HASHES_PUBKEY,
-                instructionSysvarAccount: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+                masterEdition: masterEdition,
             },
         }),
     );
